@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Librería Gestión - Iniciar Sesión</title>
     <link rel="stylesheet" href="style.css">
 </head>
@@ -16,28 +16,78 @@
             
             <div id="login-status" class="login-status"></div>
             
-            <div class="google-signin-container">
-                <div id="g_id_onload"
-                     data-client_id="193099771151-s4f2eknomeire8tmbirv7vnfqtnimujo.apps.googleusercontent.com"
-                     data-callback="handleGoogleLogin"
-                     data-auto_prompt="false">
+            <form id="loginForm" class="login-form">
+                <div class="form-group">
+                    <label>✉️ Tu correo electrónico</label>
+                    <input type="email" id="loginEmail" placeholder="tucorreo@gmail.com" required autofocus>
                 </div>
-                <div class="g_id_signin"
-                     data-type="standard"
-                     data-size="large"
-                     data-theme="outline"
-                     data-text="sign_in_with"
-                     data-shape="rectangular"
-                     data-logo_alignment="left">
-                </div>
-            </div>
+                <button type="submit" class="btn-primary btn-large" style="width: 100%;">Ingresar</button>
+            </form>
             
-            <p class="login-note">Solo usuarios autorizados pueden acceder</p>
+            <p class="login-note">Solo usuarios autorizados pueden acceder. Contactá al administrador si no tenés acceso.</p>
         </div>
     </div>
     
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="config.js"></script>
-    <script src="script.js"></script>
+    <script>
+        // Script de login simplificado
+        const form = document.getElementById('loginForm');
+        const statusDiv = document.getElementById('login-status');
+        
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('loginEmail').value.trim();
+            
+            if (!email) {
+                statusDiv.innerHTML = '<div class="error">❌ Ingresá un email válido</div>';
+                return;
+            }
+            
+            statusDiv.innerHTML = '<div>⏳ Verificando acceso...</div>';
+            
+            try {
+                // Llamar al backend para verificar
+                const url = `${CONFIG.GAS_URL}?accion=login&token=&datos=${encodeURIComponent(JSON.stringify({ email: email }))}`;
+                
+                const response = await fetch(url, { method: 'POST' });
+                const resultado = await response.json();
+                
+                if (resultado.success) {
+                    // Guardar token y redirigir
+                    localStorage.setItem('libToken', resultado.data.token);
+                    localStorage.setItem('libUser', email);
+                    window.location.href = 'dashboard.html';
+                } else {
+                    statusDiv.innerHTML = `<div class="error">❌ Acceso denegado. ${resultado.error || 'Email no autorizado'}</div>`;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="error">❌ Error de conexión. ¿El backend está desplegado?</div>`;
+                console.error(error);
+            }
+        });
+    </script>
+    <style>
+        .login-form {
+            margin: 1rem 0;
+        }
+        .login-form .form-group {
+            margin-bottom: 1rem;
+            text-align: left;
+        }
+        .login-form input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+        .error {
+            color: #ef4444;
+            background: #fee2e2;
+            padding: 0.75rem;
+            border-radius: 8px;
+        }
+    </style>
 </body>
 </html>
