@@ -217,7 +217,6 @@ const CONFIG = {
 
     <script src="config.js"></script>
     <script>
-        // Script de login simplificado
         const form = document.getElementById('loginForm');
         const statusDiv = document.getElementById('login-status');
 
@@ -234,20 +233,39 @@ const CONFIG = {
             statusDiv.innerHTML = '<div>⏳ Verificando acceso...</div>';
 
             try {
-                // Llamar al backend para verificar
-                const url = `${CONFIG.GAS_URL}?accion=login&token=&datos=${encodeURIComponent(JSON.stringify({ email: email }))}`;
+                // Construir URL manualmente (evitando modo no-cors)
+                const params = new URLSearchParams();
+                params.append('accion', 'login');
+                params.append('token', '');
+                params.append('datos', JSON.stringify({ email: email }));
 
-                const response = await fetch(url, { method: 'POST' });
-                const resultado = await response.json();
+                const url = `${CONFIG.GAS_URL}?${params.toString()}`;
 
-                if (resultado.success) {
-                    // Guardar token y redirigir
-                    localStorage.setItem('libToken', resultado.data.token);
-                    localStorage.setItem('libUser', email);
-                    window.location.href = 'dashboard.html';
-                } else {
-                    statusDiv.innerHTML = `<div class="error">❌ Acceso denegado. ${resultado.error || 'Email no autorizado'}</div>`;
-                }
+                // Usar JSONP en lugar de fetch para evitar CORS
+                const callbackName = 'jsonp_callback_' + Date.now();
+
+                const script = document.createElement('script');
+                script.src = url + '&callback=' + callbackName;
+
+                window[callbackName] = function(resultado) {
+                    delete window[callbackName];
+                    document.body.removeChild(script);
+
+                    if (resultado.success) {
+                        localStorage.setItem('libToken', resultado.data.token);
+                        localStorage.setItem('libUser', email);
+                        window.location.href = 'dashboard.html';
+                    } else {
+                        statusDiv.innerHTML = `<div class="error">❌ Acceso denegado. ${resultado.error || 'Email no autorizado'}</div>`;
+                    }
+                };
+
+                script.onerror = function() {
+                    statusDiv.innerHTML = `<div class="error">❌ Error de conexión. Verificá que la URL de GAS sea correcta.</div>`;
+                };
+
+                document.body.appendChild(script);
+
             } catch (error) {
                 statusDiv.innerHTML = `<div class="error">❌ Error de conexión. ¿El backend está desplegado?</div>`;
                 console.error(error);

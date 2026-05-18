@@ -59,6 +59,7 @@
                 
                 const script = document.createElement('script');
                 script.src = url + '&callback=' + callbackName;
+                script.charset = 'UTF-8';
                 
                 window[callbackName] = function(resultado) {
                     delete window[callbackName];
