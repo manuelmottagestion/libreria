@@ -1,0 +1,67 @@
+<div class="page-finanzas">
+    <div class="page-header">
+        <h2>💵 Control Financiero</h2>
+    </div>
+    
+    <!-- Tarjetas de resumen -->
+    <div class="stats-grid">
+        <div class="stat-card income">
+            <div class="stat-icon">💰</div>
+            <div class="stat-info">
+                <span class="stat-label">Ingresos Totales</span>
+                <span class="stat-value" id="totalIngresos">$0</span>
+            </div>
+        </div>
+        <div class="stat-card expense">
+            <div class="stat-icon">💸</div>
+            <div class="stat-info">
+                <span class="stat-label">Egresos Totales</span>
+                <span class="stat-value" id="totalEgresos">$0</span>
+            </div>
+        </div>
+        <div class="stat-card balance">
+            <div class="stat-icon">⚖️</div>
+            <div class="stat-info">
+                <span class="stat-label">Balance Actual</span>
+                <span class="stat-value" id="balanceActual">$0</span>
+            </div>
+        </div>
+        <div class="stat-card profit">
+            <div class="stat-icon">📈</div>
+            <div class="stat-info">
+                <span class="stat-label">Ganancia Neta</span>
+                <span class="stat-value" id="gananciaNeta">$0</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Gráfico simple de balance (CSS puro) -->
+    <div class="balance-chart">
+        <h3>Evolución del Balance</h3>
+        <div id="balanceBars" class="bars-container">
+            <!-- Se llena dinámicamente -->
+        </div>
+    </div>
+    
+    <!-- Tabla de movimientos -->
+    <div class="table-container">
+        <h3>Historial de Movimientos</h3>
+        <div class="table-responsive">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Tipo</th>
+                        <th>Concepto</th>
+                        <th>Monto</th>
+                        <th>Usuario</th>
+                        <th>Balance</th>
+                    </tr>
+                </thead>
+                <tbody id="movimientosLista">
+                    <tr><td colspan="6">Cargando...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

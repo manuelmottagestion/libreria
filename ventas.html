@@ -1,0 +1,71 @@
+<div class="page-ventas">
+    <div class="page-header">
+        <h2>💰 Registrar Venta</h2>
+    </div>
+    
+    <div class="ventas-grid">
+        <!-- Formulario de venta -->
+        <div class="ventas-form-card">
+            <h3>Nueva Venta</h3>
+            <form id="formVenta">
+                <div class="form-group">
+                    <label>Buscar/Seleccionar Producto</label>
+                    <select id="ventaProductoId" required>
+                        <option value="">-- Seleccionar producto --</option>
+                    </select>
+                </div>
+                <div class="info-producto" id="infoProductoSeleccionado" style="display:none;">
+                    <div class="info-row">
+                        <span>📦 Stock disponible:</span>
+                        <strong id="infoStock">0</strong>
+                    </div>
+                    <div class="info-row">
+                        <span>💰 Precio unitario:</span>
+                        <strong id="infoPrecio">$0</strong>
+                    </div>
+                    <div class="info-row">
+                        <span>📈 Ganancia por unidad:</span>
+                        <strong id="infoGanancia">$0</strong>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Cantidad</label>
+                    <input type="number" id="ventaCantidad" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label>Cliente (opcional)</label>
+                    <input type="text" id="ventaCliente" placeholder="Mostrador">
+                </div>
+                <div class="form-group total-preview">
+                    <label>💰 Total a pagar:</label>
+                    <span id="ventaTotalPreview">$0</span>
+                </div>
+                <button type="submit" class="btn-success btn-large">✅ Confirmar Venta</button>
+            </form>
+        </div>
+        
+        <!-- Historial de ventas -->
+        <div class="ventas-historial-card">
+            <h3>📋 Últimas Ventas</h3>
+            <div class="search-bar">
+                <input type="text" id="buscarVenta" placeholder="🔍 Buscar venta...">
+            </div>
+            <div class="table-responsive">
+                <table class="data-table" id="tablaVentas">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Producto</th>
+                            <th>Cant</th>
+                            <th>Total</th>
+                            <th>Ganancia</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ventasLista">
+                        <tr><td colspan="5">Cargando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
