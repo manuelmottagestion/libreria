@@ -46,34 +46,35 @@
             statusDiv.innerHTML = '<div>⏳ Verificando acceso...</div>';
 
             try {
-                // Usar fetch normal con modo cors
-                const params = new URLSearchParams();
-                params.append('accion', 'login');
-                params.append('datos', JSON.stringify({ email: email }));
-                
-                const url = `${CONFIG.GAS_URL}?${params.toString()}`;
-                
-                const response = await fetch(url, {
-                    method: 'GET',
-                    mode: 'cors',
-                    headers: {
-                        'Accept': 'application/json'
+                const callbackName = 'jsonp_' + Date.now();
+
+                const script = document.createElement('script');
+                script.src = `${CONFIG.GAS_URL}?accion=login&datos=${encodeURIComponent(JSON.stringify({ email: email }))}&callback=${callbackName}`;
+
+                window[callbackName] = function(resultado) {
+                    delete window[callbackName];
+                    document.body.removeChild(script);
+
+                    if (resultado.success) {
+                        localStorage.setItem('libToken', resultado.data.token);
+                        localStorage.setItem('libUser', email);
+                        window.location.href = 'dashboard.html';
+                    } else {
+                        statusDiv.innerHTML = `<div class="error">❌ Acceso denegado. ${resultado.error || 'Email no autorizado'}</div>`;
                     }
-                });
-                
-                const resultado = await response.json();
-                
-                if (resultado.success) {
-                    localStorage.setItem('libToken', resultado.data.token);
-                    localStorage.setItem('libUser', email);
-                    window.location.href = 'dashboard.html';
-                } else {
-                    statusDiv.innerHTML = `<div class="error">❌ Acceso denegado. ${resultado.error || 'Email no autorizado'}</div>`;
-                }
-                
+                };
+
+                script.onerror = function() {
+                    delete window[callbackName];
+                    document.body.removeChild(script);
+                    statusDiv.innerHTML = `<div class="error">❌ Error de conexión. Verificá la URL del backend.</div>`;
+                };
+
+                document.body.appendChild(script);
+
             } catch (error) {
                 console.error('Error detallado:', error);
-                statusDiv.innerHTML = `<div class="error">❌ Error de conexión: ${error.message}</div>`;
+                statusDiv.innerHTML = `<div class="error">❌ Error inesperado: ${error.message}</div>`;
             }
         });
     </script>
