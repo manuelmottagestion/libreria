@@ -43,13 +43,22 @@
                 return;
             }
 
+            if (window.location.protocol === 'file:') {
+                statusDiv.innerHTML = '<div class="error">❌ Estás abriendo la app desde file://. Iniciá la app con un servidor local (por ejemplo: http://localhost:5500) o súbela a GitHub Pages.</div>';
+                return;
+            }
+
             statusDiv.innerHTML = '<div>⏳ Verificando acceso...</div>';
 
             try {
                 const callbackName = 'jsonp_' + Date.now();
 
                 const script = document.createElement('script');
-                script.src = `${CONFIG.GAS_URL}?accion=login&datos=${encodeURIComponent(JSON.stringify({ email: email }))}&callback=${callbackName}`;
+                const origin = window.location.origin === 'null' ? '' : window.location.origin;
+                const referer = window.location.href;
+                script.src = `${CONFIG.GAS_URL}?accion=login&datos=${encodeURIComponent(JSON.stringify({ email: email }))}&callback=${callbackName}` +
+                             `&origin=${encodeURIComponent(origin)}` +
+                             `&referer=${encodeURIComponent(referer)}`;
 
                 window[callbackName] = function(resultado) {
                     delete window[callbackName];
