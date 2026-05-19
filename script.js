@@ -100,21 +100,22 @@ async function callGAS(accion, datos = {}) {
     try {
         const response = await fetch(url.toString(), {
             method: 'POST',
-            mode: 'no-cors', // Necesario para GAS
+            mode: 'cors',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
             }
         });
-        
-        // Con 'no-cors' no podemos leer respuesta directamente
-        // Alternativa: usar JSONP o cambiar la configuración de GAS
-        
-        // Para evitar problemas, usamos un proxy o cambiamos la estrategia
-        // Simplificamos: usaremos fetch normal con modo 'cors' si GAS lo permite
-        // En GAS, el despliegue debe tener "Ejecutar como: Yo" y acceso "Cualquier persona con cuenta de Google"
-        
-        return await response.json();
-        
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status} ${response.statusText}`);
+        }
+
+        const text = await response.text();
+        try {
+            return JSON.parse(text);
+        } catch (parseError) {
+            throw new Error(`Respuesta inválida del backend: ${text.slice(0, 200)}`);
+        }
     } catch (error) {
         console.error('Error calling GAS:', error);
         throw error;

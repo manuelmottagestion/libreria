@@ -15,6 +15,7 @@
             <div class="login-divider"></div>
             
             <div id="login-status" class="login-status"></div>
+            <div id="login-debug" class="login-debug"></div>
             
             <form id="loginForm" class="login-form">
                 <div class="form-group">
@@ -53,12 +54,17 @@
             try {
                 const callbackName = 'jsonp_' + Date.now();
 
-                const script = document.createElement('script');
                 const origin = window.location.origin === 'null' ? '' : window.location.origin;
                 const referer = window.location.href;
-                script.src = `${CONFIG.GAS_URL}?accion=login&datos=${encodeURIComponent(JSON.stringify({ email: email }))}&callback=${callbackName}` +
-                             `&origin=${encodeURIComponent(origin)}` +
-                             `&referer=${encodeURIComponent(referer)}`;
+                const url = `${CONFIG.GAS_URL}?accion=login&datos=${encodeURIComponent(JSON.stringify({ email: email }))}&callback=${callbackName}` +
+                            `&origin=${encodeURIComponent(origin)}` +
+                            `&referer=${encodeURIComponent(referer)}`;
+
+                const script = document.createElement('script');
+                script.src = url;
+
+                console.log('Login JSONP URL:', url);
+                document.getElementById('login-debug').innerText = `Backend request: ${url}`;
 
                 window[callbackName] = function(resultado) {
                     delete window[callbackName];
@@ -76,7 +82,11 @@
                 script.onerror = function() {
                     delete window[callbackName];
                     document.body.removeChild(script);
-                    statusDiv.innerHTML = `<div class="error">❌ Error de conexión. Verificá la URL del backend.</div>`;
+                    const debug = document.getElementById('login-debug');
+                    if (debug) {
+                        debug.innerText += '\nERROR: No se pudo cargar el script del backend. Comprueba que el deploy de GAS esté disponible y que la URL sea correcta.';
+                    }
+                    statusDiv.innerHTML = `<div class="error">❌ Error de conexión. Verificá la URL del backend: ${CONFIG.GAS_URL}</div>`;
                 };
 
                 document.body.appendChild(script);
@@ -107,6 +117,16 @@
             background: #fee2e2;
             padding: 0.75rem;
             border-radius: 8px;
+        }
+        .login-debug {
+            margin-bottom: 1rem;
+            padding: 0.75rem;
+            border-radius: 8px;
+            background: #f3f4f6;
+            color: #1f2937;
+            font-size: 0.8rem;
+            white-space: pre-wrap;
+            word-break: break-word;
         }
     </style>
 </body>
