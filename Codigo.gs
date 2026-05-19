@@ -112,12 +112,13 @@ function manejarPeticion(e) {
 // =====================================================
 // FUNCIONES DE SEGURIDAD
 // =====================================================
+
 function validarTokenYObtenerEmail(token) {
   if (!token) return null;
-  
+
   try {
-    // Decodificar token en base64
-    const datos = JSON.parse(Utilities.base64Decode(token, true));
+    const decoded = Utilities.newBlob(Utilities.base64Decode(token)).getDataAsString();
+    const datos = JSON.parse(decoded);
     if (datos.expira > Date.now()) {
       return datos.email;
     }
