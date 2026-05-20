@@ -11,41 +11,6 @@ let ventasCache = [];
 // INICIALIZACIÓN Y AUTENTICACIÓN
 // =====================================================
 
-async function handleGoogleLogin(response) {
-    const statusDiv = document.getElementById('login-status');
-    
-    try {
-        // Decodificar token de Google
-        const payload = JSON.parse(atob(response.credential.split('.')[1]));
-        const userEmail = payload.email;
-        
-        // Generar token propio
-        currentUser = userEmail;
-        currentToken = btoa(JSON.stringify({
-            email: userEmail,
-            expira: Date.now() + CONFIG.SESSION_EXPIRATION
-        }));
-        
-        // Guardar en localStorage
-        localStorage.setItem('libUser', currentUser);
-        localStorage.setItem('libToken', currentToken);
-        
-        // Verificar con el backend
-        const verificado = await callGAS('verificarSesion', {});
-        
-        if (verificado.success && verificado.data.email === userEmail) {
-            // Redirigir al dashboard
-            window.location.href = 'dashboard.html';
-        } else {
-            throw new Error('No autorizado para usar el sistema');
-        }
-        
-    } catch (error) {
-        statusDiv.innerHTML = `<div class="error">❌ Acceso denegado: ${error.message}</div>`;
-        console.error(error);
-    }
-}
-
 async function checkAuth() {
     const token = localStorage.getItem('libToken');
     const user = localStorage.getItem('libUser');
@@ -59,15 +24,20 @@ async function checkAuth() {
     
     try {
         const result = await callGAS('verificarSesion', {});
-        if (!result.success || result.data.email !== user) {
+        const emailBackend = (result.data?.email || '').toLowerCase().trim();
+        const emailLocal = (user || '').toLowerCase().trim();
+
+        if (!result.success || emailBackend !== emailLocal) {
             throw new Error('Sesión inválida');
         }
-        
+
         currentToken = token;
         currentUser = user;
-        document.getElementById('userEmail').innerText = user;
+        const userEmailEl = document.getElementById('userEmail');
+        if (userEmailEl) userEmailEl.innerText = user;
         return true;
     } catch (error) {
+        console.error('checkAuth falló:', error);
         localStorage.removeItem('libToken');
         localStorage.removeItem('libUser');
         window.location.href = 'index.html';
@@ -85,62 +55,55 @@ function logout() {
 // COMUNICACIÓN CON GAS
 // =====================================================
 
-async function callGAS(accion, datos = {}) {
+/**
+ * Llama al backend vía JSONP (GET). Devuelve Promise → compatible con await.
+ * Siempre envía origin y referer para la lista blanca del backend.
+ */
+function callGAS(accion, datos = {}) {
     const token = localStorage.getItem('libToken');
-    
-    if (!token && accion !== 'verificarSesion') {
-        throw new Error('No autenticado');
-    }
-    
-    const url = new URL(CONFIG.GAS_URL);
-    url.searchParams.append('accion', accion);
-    url.searchParams.append('token', token || '');
-    url.searchParams.append('datos', JSON.stringify(datos));
-    
-    try {
-        const response = await fetch(url.toString(), {
-            method: 'POST',
-            mode: 'cors',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            }
-        });
 
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status} ${response.statusText}`);
+    if (!token && accion !== 'login') {
+        return Promise.reject(new Error('No autenticado'));
+    }
+
+    return new Promise((resolve, reject) => {
+        const callbackName = 'gas_' + Date.now();
+        const origin = window.location.origin === 'null' ? '' : window.location.origin;
+        const referer = window.location.href;
+
+        const url = new URL(CONFIG.GAS_URL);
+        url.searchParams.set('accion', accion);
+        url.searchParams.set('token', token || '');
+        url.searchParams.set('datos', JSON.stringify(datos));
+        url.searchParams.set('callback', callbackName);
+        url.searchParams.set('origin', origin);
+        url.searchParams.set('referer', referer);
+
+        const script = document.createElement('script');
+        const timeout = setTimeout(() => {
+            cleanup();
+            reject(new Error('Timeout: el backend no respondió a tiempo'));
+        }, 20000);
+
+        function cleanup() {
+            clearTimeout(timeout);
+            delete window[callbackName];
+            if (script.parentNode) script.parentNode.removeChild(script);
         }
 
-        const text = await response.text();
-        try {
-            return JSON.parse(text);
-        } catch (parseError) {
-            throw new Error(`Respuesta inválida del backend: ${text.slice(0, 200)}`);
-        }
-    } catch (error) {
-        console.error('Error calling GAS:', error);
-        throw error;
-    }
-}
+        window[callbackName] = function(resultado) {
+            cleanup();
+            resolve(resultado);
+        };
 
-// Versión mejorada con JSONP (más compatible)
-function callGASJSONP(accion, datos = {}, callback) {
-    const token = localStorage.getItem('libToken');
-    const callbackName = 'callback_' + Date.now();
-    
-    window[callbackName] = function(response) {
-        delete window[callbackName];
-        callback(response);
-    };
-    
-    const url = CONFIG.GAS_URL + 
-        '?accion=' + encodeURIComponent(accion) +
-        '&token=' + encodeURIComponent(token || '') +
-        '&datos=' + encodeURIComponent(JSON.stringify(datos)) +
-        '&callback=' + callbackName;
-    
-    const script = document.createElement('script');
-    script.src = url;
-    document.body.appendChild(script);
+        script.onerror = () => {
+            cleanup();
+            reject(new Error('No se pudo conectar con el backend. Revisá CONFIG.GAS_URL y el despliegue de Apps Script.'));
+        };
+
+        script.src = url.toString();
+        document.body.appendChild(script);
+    });
 }
 
 // =====================================================
