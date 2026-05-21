@@ -1,18 +1,3 @@
-te adjunto el código actualizado de archivo que está en el backend en google apps script y los archivos del frontend en github pages, todo los códigos están en el archivo prompt_precargado.txt
-
-Archivos del frontend (en github):
-- config.js
-- dashboard.html
-- finanzas.html
-- index.html
-- productos.html
-- script.js
-- style.css
-- ventas.html
-Archivos del backend (en google apps script):
-- Codigo.gs
-
-
 // =====================================================
 // LIBRERÍA SYSTEM - BACKEND (Google Apps Script)
 // =====================================================
@@ -22,7 +7,7 @@ Archivos del backend (en google apps script):
 // 3. Haz clic en "Desplegar" → "Nuevo despliegue"
 // 4. Tipo: "Aplicación web"
 // 5. Ejecutar como: "Yo" (tu cuenta)
-// 6. Quién tiene acceso: "Cualquier persona con cuenta de Google"
+// 6. Quién tiene acceso: "Cualquiera" (incluso anónimo) — obligatorio para GitHub Pages
 // 7. Copia la URL que te da (ej: https://script.google.com/macros/s/.../exec)
 // =====================================================
 
@@ -57,56 +42,21 @@ function doPost(e) {
 }*/
 
 function manejarPeticion(e) {
-  // 1. VERIFICAR DOMINIO (lista blanca)
-  const origen = e ? (e.parameter.origin || e.header?.origin || "") : "";
-  const referer = e?.header?.["Referer"] || "";
-  const esDominioPermitido = DOMINIOS_PERMITIDOS.some(dominio => 
-    origen.startsWith(dominio) || referer.startsWith(dominio)
-  );
-  
-  if (!esDominioPermitido && !origen.includes("localhost")) {
+  const origen = e?.parameter?.origin || "";
+  const referer = e?.parameter?.referer || e?.header?.["Referer"] || "";
+
+  if (!esDominioPermitido(origen, referer)) {
     return respuestaError("Acceso denegado: dominio no autorizado", 403);
   }
-  
-  // 2. VERIFICAR AUTENTICACIÓN (token de sesión)
-  const token = e?.parameter?.token || "";
-  const emailUsuario = validarTokenYObtenerEmail(token);
-  
-  if (!emailUsuario) {
-    return respuestaError("No autorizado: debes iniciar sesión", 401);
-  }
-  
-  // 3. REGISTRAR LA ACCIÓN
-  registrarSesion(emailUsuario, e?.parameter?.accion || "consulta");
-  
-  // 4. PROCESAR LA ACCIÓN SOLICITADA
+
   const accion = e?.parameter?.accion || "";
+  const token = e?.parameter?.token || "";
   const datos = e?.parameter?.datos ? JSON.parse(e.parameter.datos) : {};
-  
-  try {
-    switch(accion) {
-      case "obtenerProductos":
-        return respuestaExito(obtenerProductos());
-      case "guardarProducto":
-        return respuestaExito(guardarProducto(datos, emailUsuario));
-      case "eliminarProducto":
-        return respuestaExito(eliminarProducto(datos.id));
-      case "registrarVenta":
-        return respuestaExito(registrarVenta(datos, emailUsuario));
-      case "obtenerVentas":
-        return respuestaExito(obtenerVentas());
-      case "obtenerFinanzas":
-        return respuestaExito(obtenerFinanzas());
-      case "verificarSesion":
-        return respuestaExito({ email: emailUsuario });
-      case "login":
-        return respuestaExito(verificarLogin(datos.email));
-      default:
-        return respuestaError("Acción no válida", 400);
-    }
-  } catch(error) {
-    return respuestaError(error.toString(), 500);
-  }
+  const resultado = ejecutarAccion(accion, token, datos);
+
+  return ContentService
+    .createTextOutput(JSON.stringify(resultado))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 // =====================================================
@@ -122,16 +72,8 @@ function validarTokenYObtenerEmail(token) {
     if (datos.expira > Date.now()) {
       return datos.email;
     }
-  } catch(e) {}
+  } catch (e) {}
   return null;
-}
-
-function generarToken(email) {
-  const payload = {
-    email: email,
-    expira: Date.now() + (24 * 60 * 60 * 1000) // 24 horas
-  };
-  return Utilities.base64Encode(JSON.stringify(payload));
 }
 
 function registrarSesion(email, accion) {
@@ -501,57 +443,91 @@ function inicializarBaseDeDatos() {
 }
 
 // =====================================================
-// SOPORTE PARA JSONP (para evitar CORS)
+// ROUTER COMPARTIDO (JSONP GET + respaldo POST)
+// =====================================================
+
+function esDominioPermitido(origen, referer) {
+  const normalizar = (url) => (url || "").replace(/\/+$/, "");
+  const o = normalizar(origen);
+  const r = normalizar(referer);
+
+  if (o.includes("localhost") || r.includes("localhost") ||
+      o.includes("127.0.0.1") || r.includes("127.0.0.1")) {
+    return true;
+  }
+
+  return DOMINIOS_PERMITIDOS.some(dominio =>
+    o.startsWith(normalizar(dominio)) || r.startsWith(normalizar(dominio))
+  );
+}
+
+function ejecutarAccion(accion, token, datos) {
+  if (accion === "login") {
+    return verificarLogin(datos.email);
+  }
+
+  const emailUsuario = validarTokenYObtenerEmail(token);
+  if (!emailUsuario) {
+    return { success: false, error: "No autenticado" };
+  }
+
+  registrarSesion(emailUsuario, accion);
+
+  try {
+    switch (accion) {
+      case "verificarSesion":
+        return { success: true, data: { email: emailUsuario } };
+      case "obtenerProductos":
+        return { success: true, data: obtenerProductos() };
+      case "guardarProducto":
+        return { success: true, data: guardarProducto(datos, emailUsuario) };
+      case "eliminarProducto":
+        return { success: true, data: eliminarProducto(datos.id) };
+      case "registrarVenta":
+        return { success: true, data: registrarVenta(datos, emailUsuario) };
+      case "obtenerVentas":
+        return { success: true, data: obtenerVentas() };
+      case "obtenerFinanzas":
+        return { success: true, data: obtenerFinanzas() };
+      default:
+        return { success: false, error: "Acción no válida" };
+    }
+  } catch (error) {
+    return { success: false, error: error.toString() };
+  }
+}
+
+// =====================================================
+// JSONP (canal principal del frontend — evita CORS)
 // =====================================================
 function doGet(e) {
   return manejarPeticionJSONP(e);
 }
 
+function jsonpResponse(callback, resultado) {
+  return ContentService
+    .createTextOutput(`${callback}(${JSON.stringify(resultado)})`)
+    .setMimeType(ContentService.MimeType.JAVASCRIPT);
+}
+
 function manejarPeticionJSONP(e) {
-  const origen = e?.parameter?.origin || e?.header?.origin || "";
-  const referer = e?.parameter?.referer || e?.header?.["Referer"] || "";
+  const origen = e?.parameter?.origin || "";
+  const referer = e?.parameter?.referer || "";
   const callback = e?.parameter?.callback || "callback";
 
-  const normalizar = (url) => (url || "").replace(/\/+$/, "");
-
-  const esDominioPermitido = DOMINIOS_PERMITIDOS.some(dominio =>
-    normalizar(origen).startsWith(normalizar(dominio)) ||
-    normalizar(referer).startsWith(normalizar(dominio))
-  );
-
-  if (!esDominioPermitido && !origen.includes("localhost")) {
-    const output = `${callback}(${JSON.stringify({ success: false, error: "Dominio no autorizado" })})`;
-    return ContentService
-      .createTextOutput(output)
-      .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  if (!esDominioPermitido(origen, referer)) {
+    return jsonpResponse(callback, { success: false, error: "Dominio no autorizado" });
   }
 
   const accion = e?.parameter?.accion || "";
   const token = e?.parameter?.token || "";
-  const datos = e?.parameter?.datos ? JSON.parse(e.parameter.datos) : {};
-  const emailUsuario = validarTokenYObtenerEmail(token);
-
-  let resultado;
-
+  let datos = {};
   try {
-    switch (accion) {
-      case "login":
-        resultado = verificarLogin(datos.email);
-        break;
-      case "verificarSesion":
-        resultado = emailUsuario
-          ? { success: true, data: { email: emailUsuario } }
-          : { success: false, error: "No autenticado" };
-        break;
-      default:
-        resultado = { success: false, error: "Acción no válida" };
-    }
-  } catch (error) {
-    resultado = { success: false, error: error.toString() };
+    datos = e?.parameter?.datos ? JSON.parse(e.parameter.datos) : {};
+  } catch (parseError) {
+    return jsonpResponse(callback, { success: false, error: "Datos inválidos" });
   }
 
-  const output = `${callback}(${JSON.stringify(resultado)})`;
-  return ContentService
-    .createTextOutput(output)
-    .setMimeType(ContentService.MimeType.JAVASCRIPT);
+  const resultado = ejecutarAccion(accion, token, datos);
+  return jsonpResponse(callback, resultado);
 }

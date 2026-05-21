@@ -55,9 +55,12 @@ function logout() {
 // COMUNICACIÓN CON GAS
 // =====================================================
 
+let gasRequestSeq = 0;
+let gasRequestChain = Promise.resolve();
+
 /**
  * Llama al backend vía JSONP (GET). Devuelve Promise → compatible con await.
- * Siempre envía origin y referer para la lista blanca del backend.
+ * Las peticiones se encolan para evitar callbacks duplicados o borrados en paralelo.
  */
 function callGAS(accion, datos = {}) {
     const token = localStorage.getItem('libToken');
@@ -66,8 +69,17 @@ function callGAS(accion, datos = {}) {
         return Promise.reject(new Error('No autenticado'));
     }
 
+    const task = () => callGASOnce(accion, datos, token);
+    const result = gasRequestChain.then(task, task);
+    gasRequestChain = result.catch(() => {});
+    return result;
+}
+
+function callGASOnce(accion, datos, token) {
     return new Promise((resolve, reject) => {
-        const callbackName = 'gas_' + Date.now();
+        const callbackName = 'gas_cb_' + (++gasRequestSeq) + '_' + Date.now();
+        let settled = false;
+
         const origin = window.location.origin === 'null' ? '' : window.location.origin;
         const referer = window.location.href;
 
@@ -80,29 +92,30 @@ function callGAS(accion, datos = {}) {
         url.searchParams.set('referer', referer);
 
         const script = document.createElement('script');
-        const timeout = setTimeout(() => {
-            cleanup();
-            reject(new Error('Timeout: el backend no respondió a tiempo'));
-        }, 20000);
 
-        function cleanup() {
-            clearTimeout(timeout);
+        function settle(fn, value) {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeoutId);
             delete window[callbackName];
             if (script.parentNode) script.parentNode.removeChild(script);
+            fn(value);
         }
 
         window[callbackName] = function(resultado) {
-            cleanup();
-            resolve(resultado);
+            settle(resolve, resultado);
         };
 
+        const timeoutId = setTimeout(() => {
+            settle(reject, new Error('Timeout: el backend no respondió a tiempo'));
+        }, 45000);
+
         script.onerror = () => {
-            cleanup();
-            reject(new Error('No se pudo conectar con el backend. Revisá CONFIG.GAS_URL y el despliegue de Apps Script.'));
+            settle(reject, new Error('No se pudo conectar con el backend. Revisá CONFIG.GAS_URL y el despliegue de Apps Script.'));
         };
 
         script.src = url.toString();
-        document.body.appendChild(script);
+        document.head.appendChild(script);
     });
 }
 
@@ -368,22 +381,26 @@ function actualizarPreviewVenta() {
 // FINANZAS
 // =====================================================
 
+function setTextIfExists(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.innerText = text;
+}
+
 async function actualizarFinanzas() {
     try {
         const result = await callGAS('obtenerFinanzas', {});
-        if (result.success) {
-            const finanzas = result.data;
-            
-            document.getElementById('totalIngresos').innerText = `$${finanzas.totalIngresos?.toFixed(2) || '0.00'}`;
-            document.getElementById('totalEgresos').innerText = `$${finanzas.totalEgresos?.toFixed(2) || '0.00'}`;
-            document.getElementById('balanceActual').innerText = `$${finanzas.balance?.toFixed(2) || '0.00'}`;
-            
-            const gananciaNeta = (finanzas.totalIngresos || 0) - (finanzas.totalEgresos || 0);
-            document.getElementById('gananciaNeta').innerText = `$${gananciaNeta.toFixed(2)}`;
-            
-            renderizarMovimientos(finanzas.movimientos || []);
-            renderizarGraficoBalance(finanzas.movimientos || []);
-        }
+        if (!result.success) return;
+
+        const finanzas = result.data;
+        setTextIfExists('totalIngresos', `$${finanzas.totalIngresos?.toFixed(2) || '0.00'}`);
+        setTextIfExists('totalEgresos', `$${finanzas.totalEgresos?.toFixed(2) || '0.00'}`);
+        setTextIfExists('balanceActual', `$${finanzas.balance?.toFixed(2) || '0.00'}`);
+
+        const gananciaNeta = (finanzas.totalIngresos || 0) - (finanzas.totalEgresos || 0);
+        setTextIfExists('gananciaNeta', `$${gananciaNeta.toFixed(2)}`);
+
+        renderizarMovimientos(finanzas.movimientos || []);
+        renderizarGraficoBalance(finanzas.movimientos || []);
     } catch (error) {
         console.error('Error cargando finanzas:', error);
     }
@@ -442,30 +459,46 @@ function renderizarGraficoBalance(movimientos) {
 async function loadPage(pageName) {
     const contentArea = document.getElementById('contentArea');
     const pageTitle = document.getElementById('pageTitle');
-    
+
     if (!contentArea) return;
-    
-    // Mapeo de páginas a archivos HTML
+
     const pages = {
         dashboard: 'dashboard_content.html',
         productos: 'productos.html',
         ventas: 'ventas.html',
         finanzas: 'finanzas.html'
     };
-    
+
+    const fileName = pages[pageName];
+    if (!fileName) {
+        contentArea.innerHTML = '<div class="error">Página no encontrada</div>';
+        return;
+    }
+
     try {
-        const response = await fetch(pages[pageName]);
+        const pageUrl = new URL(fileName, window.location.href).href;
+        const response = await fetch(pageUrl, { cache: 'no-cache' });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status} al cargar ${fileName}`);
+        }
+
         const html = await response.text();
+        if (html.includes('File not found') && html.includes('GitHub Pages')) {
+            throw new Error(`Falta el archivo ${fileName} en el servidor`);
+        }
+
         contentArea.innerHTML = html;
-        
-        pageTitle.innerText = {
-            dashboard: 'Dashboard',
-            productos: 'Productos',
-            ventas: 'Ventas',
-            finanzas: 'Finanzas'
-        }[pageName];
-        
-        // Inicializar componentes según la página
+
+        if (pageTitle) {
+            pageTitle.innerText = {
+                dashboard: 'Dashboard',
+                productos: 'Productos',
+                ventas: 'Ventas',
+                finanzas: 'Finanzas'
+            }[pageName];
+        }
+
         if (pageName === 'productos') {
             initProductosPage();
         } else if (pageName === 'ventas') {
@@ -473,11 +506,11 @@ async function loadPage(pageName) {
         } else if (pageName === 'finanzas') {
             initFinanzasPage();
         } else if (pageName === 'dashboard') {
-            initDashboardPage();
+            await initDashboardPage();
         }
-        
     } catch (error) {
-        contentArea.innerHTML = '<div class="error">Error cargando la página</div>';
+        console.error('loadPage:', error);
+        contentArea.innerHTML = `<div class="error">Error cargando la página: ${error.message}</div>`;
     }
 }
 
@@ -550,11 +583,10 @@ function initFinanzasPage() {
     setInterval(actualizarFinanzas, 30000);
 }
 
-function initDashboardPage() {
-    // Mostrar resumen en el dashboard
-    cargarProductos();
-    cargarVentas();
-    actualizarFinanzas();
+async function initDashboardPage() {
+    await cargarProductos();
+    await cargarVentas();
+    await actualizarFinanzas();
 }
 
 // =====================================================
