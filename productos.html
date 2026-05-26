@@ -2,15 +2,9 @@
 <div class="page-productos">
     <div class="page-header">
         <h2>📦 Gestión de Productos</h2>
-        <button class="btn-primary" id="btnNuevoProducto">+ Nuevo Producto</button>
+        
     </div>
-    
-    <!-- Tabs para carga individual o por lote -->
-    <div class="tabs">
-        <button class="tab-btn active" data-tab="individual">Carga Individual</button>
-        <button class="tab-btn" data-tab="lote">Carga por Lote</button>
-    </div>
-    
+
     <!-- Formulario Individual -->
     <div class="tab-pane active" id="tab-individual">
         <form id="formProductoIndividual" class="form-grid">
@@ -45,44 +39,7 @@
             </div>
         </form>
     </div>
-    
-    <!-- Formulario Lote -->
-    <div class="tab-pane" id="tab-lote">
-        <form id="formProductoLote" class="form-grid">
-            <div class="form-group">
-                <label>Nombre del producto *</label>
-                <input type="text" id="loteNombre" required>
-            </div>
-            <div class="form-group">
-                <label>Cantidad de unidades en el lote *</label>
-                <input type="number" id="loteCantidad" required min="1">
-            </div>
-            <div class="form-group">
-                <label>Costo TOTAL del lote ($) *</label>
-                <input type="number" id="loteCostoTotal" required step="0.01">
-            </div>
-            <div class="form-group highlight">
-                <label>💰 Costo por unidad (automático)</label>
-                <input type="text" id="costoPorUnidad" readonly class="readonly-field">
-            </div>
-            <div class="form-group">
-                <label>Precio de venta por unidad ($)</label>
-                <input type="number" id="lotePrecioVenta" step="0.01">
-            </div>
-            <div class="form-group">
-                <label>Fecha de compra</label>
-                <input type="date" id="loteFechaCompra">
-            </div>
-            <div class="form-group">
-                <label>Proveedor</label>
-                <input type="text" id="loteProveedor">
-            </div>
-            <div class="form-actions">
-                <button type="submit" class="btn-success">💾 Guardar Lote</button>
-            </div>
-        </form>
-    </div>
-    
+
     <!-- Tabla de productos -->
     <div class="table-container">
         <h3>Productos en stock</h3>

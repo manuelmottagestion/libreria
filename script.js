@@ -90,6 +90,7 @@ function callGASOnce(accion, datos, token) {
         url.searchParams.set('callback', callbackName);
         url.searchParams.set('origin', origin);
         url.searchParams.set('referer', referer);
+        url.searchParams.set('_nocache', Date.now());
 
         const script = document.createElement('script');
 
@@ -123,17 +124,19 @@ function callGASOnce(accion, datos, token) {
 // GESTIÓN DE PRODUCTOS
 // =====================================================
 
-async function cargarProductos() {
-    try {
-        const result = await callGAS('obtenerProductos', {});
-        if (result.success) {
-            productosCache = result.data;
-            renderizarProductos();
+async function cargarProductos(forzarRecarga = false) {
+    if (forzarRecarga || productosCache.length === 0) {
+        try {
+            const result = await callGAS('obtenerProductos', {});
+            if (result.success) {
+                productosCache = result.data;
+            }
+        } catch (error) {
+            console.error('Error cargando productos:', error);
+            mostrarNotificacion('Error al cargar productos', 'error');
         }
-    } catch (error) {
-        console.error('Error cargando productos:', error);
-        mostrarNotificacion('Error al cargar productos', 'error');
     }
+    renderizarProductos(); // Siempre renderizar con los datos más recientes del caché
 }
 
 function renderizarProductos() {
@@ -171,7 +174,7 @@ function renderizarProductos() {
 
 async function guardarProductoIndividual(event) {
     event.preventDefault();
-    
+
     const producto = {
         id: document.getElementById('productoId').value,
         nombre: document.getElementById('nombre').value,
@@ -182,51 +185,35 @@ async function guardarProductoIndividual(event) {
         proveedor: document.getElementById('proveedor').value,
         esLote: false
     };
-    
+
+    // Validación de fecha
+    let fechaCompra = document.getElementById('fechaCompra').value;
+    if (!fechaCompra) {
+        fechaCompra = new Date().toISOString().split('T')[0];
+        document.getElementById('fechaCompra').value = fechaCompra;
+    }
+    const fechaObj = new Date(fechaCompra);
+    if (fechaObj.getFullYear() < 2000 || fechaObj.getFullYear() > new Date().getFullYear()) {
+        mostrarNotificacion('Fecha de compra inválida', 'error');
+        return;
+    }
+    producto.fechaCompra = fechaCompra;
+
     try {
         const result = await callGAS('guardarProducto', producto);
         if (result.success) {
             mostrarNotificacion('Producto guardado exitosamente', 'success');
-            cargarProductos();
+            // Limpiar formulario Y RECARGAR LA LISTA
             document.getElementById('formProductoIndividual').reset();
+            await cargarProductos(true); // Pasar true para forzar recarga
+            // Si estás en la página de productos, asegurar que la tabla se re-renderice
+            if (document.getElementById('productosLista')) {
+                renderizarProductos();
+            }
         }
     } catch (error) {
-        mostrarNotificacion('Error al guardar', 'error');
+        mostrarNotificacion('Error al guardar: ' + error.message, 'error');
     }
-}
-
-async function guardarProductoLote(event) {
-    event.preventDefault();
-    
-    const cantidad = parseInt(document.getElementById('loteCantidad').value);
-    const costoTotal = parseFloat(document.getElementById('loteCostoTotal').value);
-    const costoUnitario = costoTotal / cantidad;
-    
-    // Crear productos individuales del lote
-    const nombreBase = document.getElementById('loteNombre').value;
-    const precioVenta = parseFloat(document.getElementById('lotePrecioVenta').value) || 0;
-    const fechaCompra = document.getElementById('loteFechaCompra').value;
-    const proveedor = document.getElementById('loteProveedor').value;
-    
-    for (let i = 1; i <= cantidad; i++) {
-        const producto = {
-            nombre: `${nombreBase} (Unidad ${i})`,
-            costoUnitario: costoUnitario,
-            precioVenta: precioVenta,
-            stock: 1,
-            fechaCompra: fechaCompra,
-            proveedor: proveedor,
-            esLote: true,
-            loteCantidad: cantidad,
-            loteCostoTotal: costoTotal
-        };
-        
-        await callGAS('guardarProducto', producto);
-    }
-    
-    mostrarNotificacion(`Lote de ${cantidad} productos guardado exitosamente`, 'success');
-    cargarProductos();
-    document.getElementById('formProductoLote').reset();
 }
 
 function editarProducto(id) {
@@ -336,34 +323,42 @@ async function cargarSelectProductos() {
 
 async function registrarVenta(event) {
     event.preventDefault();
-    
     const productoId = document.getElementById('ventaProductoId').value;
     const cantidad = parseInt(document.getElementById('ventaCantidad').value);
     const cliente = document.getElementById('ventaCliente').value;
-    
+
     if (!productoId || !cantidad) {
-        mostrarNotificacion('Complete todos los campos', 'error');
+        mostrarNotificacion('Seleccione un producto y una cantidad válida', 'error');
         return;
     }
-    
+
+    const loadingNotif = mostrarNotificacion('Procesando venta...', 'info', true);
     try {
-        const result = await callGAS('registrarVenta', {
-            productoId,
-            cantidad,
-            cliente
-        });
-        
+        const result = await callGAS('registrarVenta', { productoId, cantidad, cliente });
+        if (loadingNotif) loadingNotif.remove();
+
         if (result.success) {
             mostrarNotificacion(`Venta registrada. Total: $${result.data.total.toFixed(2)}`, 'success');
             document.getElementById('formVenta').reset();
             document.getElementById('infoProductoSeleccionado').style.display = 'none';
-            cargarProductos();
-            cargarSelectProductos();
-            cargarVentas();
-            actualizarFinanzas();
+            document.getElementById('ventaTotalPreview').innerHTML = '$0';
+            // Recargar todo después de una venta exitosa
+            await cargarProductos(true);
+            await cargarSelectProductos();
+            await cargarVentas(true);
+            await actualizarFinanzas();
+        } else {
+            // Manejar específicamente el error de stock
+            if (result.error && result.error.includes('Stock insuficiente')) {
+                mostrarNotificacion(`Error: Stock insuficiente. Stock disponible: ${result.data?.stockDisponible || '?'}`, 'error');
+            } else {
+                mostrarNotificacion(`Error: ${result.error || 'Error desconocido'}`, 'error');
+            }
         }
     } catch (error) {
-        mostrarNotificacion('Error al registrar venta', 'error');
+        if (loadingNotif) loadingNotif.remove();
+        console.error('Error en registro de venta:', error);
+        mostrarNotificacion(`Error de conexión: ${error.message}`, 'error');
     }
 }
 
@@ -466,7 +461,8 @@ async function loadPage(pageName) {
         dashboard: 'dashboard_content.html',
         productos: 'productos.html',
         ventas: 'ventas.html',
-        finanzas: 'finanzas.html'
+        finanzas: 'finanzas.html',
+        estadisticas: 'estadisticas.html'
     };
 
     const fileName = pages[pageName];
@@ -495,7 +491,8 @@ async function loadPage(pageName) {
                 dashboard: 'Dashboard',
                 productos: 'Productos',
                 ventas: 'Ventas',
-                finanzas: 'Finanzas'
+                finanzas: 'Finanzas',
+                estadisticas: 'Estadísticas'
             }[pageName];
         }
 
@@ -507,6 +504,8 @@ async function loadPage(pageName) {
             initFinanzasPage();
         } else if (pageName === 'dashboard') {
             await initDashboardPage();
+        } else if (pageName === 'estadisticas') {
+            await initEstadisticasPage();
         }
     } catch (error) {
         console.error('loadPage:', error);
@@ -530,29 +529,6 @@ function initProductosPage() {
     // Formularios
     const formIndividual = document.getElementById('formProductoIndividual');
     if (formIndividual) formIndividual.onsubmit = guardarProductoIndividual;
-    
-    const formLote = document.getElementById('formProductoLote');
-    if (formLote) {
-        formLote.onsubmit = guardarProductoLote;
-        
-        // Calcular costo por unidad automáticamente
-        const loteCantidad = document.getElementById('loteCantidad');
-        const loteCostoTotal = document.getElementById('loteCostoTotal');
-        const costoPorUnidad = document.getElementById('costoPorUnidad');
-        
-        function actualizarCostoUnitario() {
-            const cantidad = parseFloat(loteCantidad.value) || 0;
-            const costoTotal = parseFloat(loteCostoTotal.value) || 0;
-            if (cantidad > 0 && costoTotal > 0) {
-                costoPorUnidad.value = `$${(costoTotal / cantidad).toFixed(2)} por unidad`;
-            } else {
-                costoPorUnidad.value = '';
-            }
-        }
-        
-        loteCantidad.oninput = actualizarCostoUnitario;
-        loteCostoTotal.oninput = actualizarCostoUnitario;
-    }
     
     // Búsqueda
     const buscador = document.getElementById('buscarProducto');
@@ -587,6 +563,73 @@ async function initDashboardPage() {
     await cargarProductos();
     await cargarVentas();
     await actualizarFinanzas();
+}
+
+async function initEstadisticasPage() {
+    const container = document.getElementById('statsMensualGrid');
+    const barsContainer = document.getElementById('balanceBars');
+    if (container) container.innerHTML = '<p class="text-muted">Cargando estadísticas...</p>';
+    
+    try {
+        const result = await callGAS('obtenerFinanzasPorMes', {});
+        if (result.success && result.data) {
+            renderizarEstadisticasMensuales(result.data, container);
+            renderizarGraficoBalanceMensual(result.data, barsContainer);
+        } else {
+            if (container) container.innerHTML = '<p class="text-muted">No hay datos suficientes para mostrar estadísticas.</p>';
+        }
+    } catch (error) {
+        console.error("Error cargando estadísticas mensuales:", error);
+        if (container) container.innerHTML = '<p class="text-muted">Error al cargar las estadísticas.</p>';
+    }
+}
+
+function renderizarEstadisticasMensuales(datosMensuales, container) {
+    if (!container) return;
+    if (!datosMensuales || datosMensuales.length === 0) {
+        container.innerHTML = '<p class="text-muted">No hay datos mensuales para mostrar.</p>';
+        return;
+    }
+    let html = '<div class="stats-grid">';
+    datosMensuales.forEach(mes => {
+        html += `
+            <div class="stat-card">
+                <div class="stat-icon">📅</div>
+                <div class="stat-info">
+                    <span class="stat-label">${mes.mes}</span>
+                    <span class="stat-value">$${mes.balance.toFixed(2)}</span>
+                    <small>Ing: $${mes.ingresos.toFixed(2)} / Egr: $${mes.egresos.toFixed(2)}</small>
+                </div>
+            </div>
+        `;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function renderizarGraficoBalanceMensual(datosMensuales, container) {
+    if (!container) return;
+    if (!datosMensuales || datosMensuales.length === 0) {
+        container.innerHTML = '<p class="text-muted">No hay datos para mostrar el gráfico.</p>';
+        return;
+    }
+    
+    const balances = datosMensuales.map(m => m.balance);
+    const maxBalance = Math.max(...balances.map(Math.abs), 100);
+    
+    container.innerHTML = datosMensuales.map(mes => {
+        let height = 10;
+        if (maxBalance !== 0) {
+            height = (mes.balance / maxBalance) * 180;
+            height = Math.max(5, Math.min(180, height));
+        }
+        const barColor = mes.balance >= 0 ? 'var(--success)' : 'var(--danger)';
+        return `
+            <div class="bar" style="height: ${height}px; background-color: ${barColor};">
+                <div class="bar-label">${mes.mes}<br>$${mes.balance.toFixed(0)}</div>
+            </div>
+        `;
+    }).join('');
 }
 
 // =====================================================
@@ -631,16 +674,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             };
         }
         
-        // Navegación
         document.querySelectorAll('.nav-item').forEach(item => {
             item.onclick = (e) => {
                 e.preventDefault();
                 const page = item.dataset.page;
-                
                 document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
                 item.classList.add('active');
-                
                 loadPage(page);
+                
+                // 👇 CERRAR EL SIDEBAR EN MÓVIL DESPUÉS DE HACER CLIC
+                if (window.innerWidth <= 768) {
+                    const sidebar = document.getElementById('sidebar');
+                    if (sidebar) sidebar.classList.remove('open');
+                }
             };
         });
         

@@ -15,7 +15,7 @@
             <div class="login-divider"></div>
             
             <div id="login-status" class="login-status"></div>
-            <div id="login-debug" class="login-debug"></div>
+            <!-- <div id="login-debug" class="login-debug"></div> -->
             
             <form id="loginForm" class="login-form">
                 <div class="form-group">
@@ -34,7 +34,7 @@
     <script>
         const form = document.getElementById('loginForm');
         const statusDiv = document.getElementById('login-status');
-        const debugDiv = document.getElementById('login-debug');
+        //const debugDiv = document.getElementById('login-debug');
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -52,7 +52,7 @@
             }
 
             statusDiv.innerHTML = '<div>⏳ Verificando acceso...</div>';
-            if (debugDiv) debugDiv.innerText = `Backend: ${CONFIG.GAS_URL}`;
+            //if (debugDiv) debugDiv.innerText = `Backend: ${CONFIG.GAS_URL}`;
 
             try {
                 const resultado = await callGAS('login', { email: email });
@@ -68,9 +68,9 @@
             } catch (error) {
                 console.error('Login falló:', error);
                 statusDiv.innerHTML = `<div class="error">❌ ${error.message}</div>`;
-                if (debugDiv) {
+                /*if (debugDiv) {
                     debugDiv.innerText += `\nERROR: ${error.message}`;
-                }
+                }*/
             }
         });
     </script>
@@ -95,7 +95,7 @@
             padding: 0.75rem;
             border-radius: 8px;
         }
-        .login-debug {
+        /* .login-debug {
             margin-bottom: 1rem;
             padding: 0.75rem;
             border-radius: 8px;
@@ -104,7 +104,7 @@
             font-size: 0.8rem;
             white-space: pre-wrap;
             word-break: break-word;
-        }
+        } */
     </style>
 </body>
 </html>
