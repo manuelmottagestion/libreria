@@ -106,7 +106,7 @@ body.login-page {
 
 /* Sidebar */
 .sidebar {
-    width: 280px;
+    width: 200px;
     background: var(--white);
     box-shadow: var(--shadow);
     display: flex;
@@ -201,7 +201,7 @@ body.login-page {
 /* Main Content */
 .main-content {
     flex: 1;
-    margin-left: 280px;
+    margin-left: 240px;
     min-height: 100vh;
 }
 
@@ -231,7 +231,7 @@ body.login-page {
 }
 
 .content-area {
-    padding: 1.5rem;
+    padding: 1.5rem 1.5rem 1.5rem 0;
 }
 
 /* ===================================================== */
@@ -551,14 +551,6 @@ body.login-page {
 .total-preview span {
     color: var(--primary);
     font-size: 1.25rem;
-}
-
-/* Balance chart */
-.balance-chart {
-    background: var(--white);
-    border-radius: var(--radius);
-    padding: 1rem;
-    margin-bottom: 1.5rem;
 }
 
 .bars-container {

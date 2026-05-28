@@ -251,16 +251,18 @@ async function eliminarProducto(id) {
 // GESTIÓN DE VENTAS
 // =====================================================
 
-async function cargarVentas() {
-    try {
-        const result = await callGAS('obtenerVentas', {});
-        if (result.success) {
-            ventasCache = result.data;
-            renderizarVentas();
+async function cargarVentas(forzarRecarga = false) {
+    if (forzarRecarga || ventasCache.length === 0) {
+        try {
+            const result = await callGAS('obtenerVentas', {});
+            if (result.success) {
+                ventasCache = result.data;
+            }
+        } catch (error) {
+            console.error('Error cargando ventas:', error);
         }
-    } catch (error) {
-        console.error('Error cargando ventas:', error);
     }
+    renderizarVentas();
 }
 
 function renderizarVentas() {
@@ -274,7 +276,7 @@ function renderizarVentas() {
     );
     
     if (ventasFiltradas.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5">No hay ventas registradas</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6">No hay ventas registradas</td></tr>';
         return;
     }
     
@@ -285,8 +287,181 @@ function renderizarVentas() {
             <td>${v.cantidad || 0}</td>
             <td>$${Number(v.total || 0).toFixed(2)}</td>
             <td class="text-success">$${Number(v.ganancia || 0).toFixed(2)}</td>
+            <td>
+                <button class="btn-secondary btn-sm" data-action="edit" data-id="${v.id}" title="Editar venta">✏️</button>
+                <button class="btn-danger btn-sm" data-action="delete" data-id="${v.id}" title="Eliminar venta">🗑️</button>
+            </td>
         </tr>
     `).join('');
+
+    tbody.onclick = (event) => {
+        const button = event.target.closest('button[data-action]');
+        if (!button) return;
+
+        const ventaId = button.dataset.id;
+        if (button.dataset.action === 'edit') {
+            editarVenta(ventaId);
+        } else if (button.dataset.action === 'delete') {
+            eliminarVenta(ventaId);
+        }
+    };
+}
+
+function getVentaById(id) {
+    const idStr = String(id);
+    return ventasCache.find(v => String(v.id) === idStr);
+}
+
+// =====================================================
+// MODIFICAR Y ELIMINAR VENTAS (Frontend)
+// =====================================================
+
+async function editarVenta(id) {
+    const idStr = String(id);
+    //const venta = getVentaById(id);
+    const venta = ventasCache.find(v => String(v.id) === idStr);
+    if (!venta) {
+        mostrarNotificacion('Venta no encontrada', 'error');
+        return;
+    }
+    
+    // Crear modal para editar venta
+    const modal = document.getElementById('modal');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalBody = document.getElementById('modalBody');
+
+    const producto = productosCache.find(p => p.id === venta.productoId);
+    const precioUnitario = producto ? producto.precioVenta : 0;
+    
+    modalTitle.innerText = '✏️ Editar Venta';
+    modalBody.innerHTML = `
+        <form id="formEditarVenta" class="form-grid" style="display:block;">
+            <div class="form-group">
+                <label>Producto</label>
+                <input type="text" value="${venta.productoNombre}" disabled>
+                <small class="text-muted">No se puede cambiar el producto</small>
+            </div>
+            <div class="form-group">
+                <label>Cantidad</label>
+                <input type="number" id="editCantidad" value="${venta.cantidad}" min="1" required>
+            </div>
+            <div class="form-group">
+                <label>Cliente</label>
+                <input type="text" id="editCliente" value="${venta.cliente || 'Mostrador'}">
+            </div>
+            <div class="form-group">
+                <label>Fecha (opcional)</label>
+                <input type="date" id="editFecha" value="${new Date(venta.fecha).toISOString().split('T')[0]}">
+            </div>
+            <div class="form-group total-preview">
+                <label>💰 Total a pagar:</label>
+                <span id="editTotalPreview">$${(venta.cantidad * precioUnitario).toFixed(2)}</span>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn-success">💾 Guardar Cambios</button>
+                <button type="button" class="btn-secondary modal-close-btn">Cancelar</button>
+            </div>
+        </form>
+    `;
+    
+    modal.classList.add('active');
+    
+    // Configurar eventos del modal
+    const form = document.getElementById('formEditarVenta');
+    const closeBtn = modalBody.querySelector('.modal-close-btn');
+    const modalClose = modal.querySelector('.modal-close');
+    const cantidadInput = document.getElementById('editCantidad');
+    const totalPreview = document.getElementById('editTotalPreview');
+
+    const actualizarPreview = () => {
+        const cantidad = parseInt(cantidadInput.value) || 0;
+        totalPreview.innerText = `$${(cantidad * precioUnitario).toFixed(2)}`;
+    };
+    cantidadInput.oninput = actualizarPreview;
+    
+    const cerrarModal = () => modal.classList.remove('active');
+    if (closeBtn) closeBtn.onclick = cerrarModal;
+    if (modalClose) modalClose.onclick = cerrarModal;
+    
+    form.onsubmit = async (e) => {
+        e.preventDefault();
+        
+        const nuevaCantidad = parseInt(cantidadInput.value);
+        const nuevoCliente = document.getElementById('editCliente').value;
+        const nuevaFecha = document.getElementById('editFecha').value;
+        
+        if (nuevaCantidad < 1) {
+            mostrarNotificacion('La cantidad debe ser al menos 1', 'error');
+            return;
+        }
+        
+        // Verificar stock disponible
+        const productoOriginal = productosCache.find(p => p.id === venta.productoId);
+        if (productoOriginal && nuevaCantidad > (productoOriginal.stock + venta.cantidad)) {
+            mostrarNotificacion(`Stock insuficiente. Stock actual: ${productoOriginal.stock + venta.cantidad}`, 'error');
+            return;
+        }
+        
+        const loadingNotif = mostrarNotificacion('Guardando cambios...', 'info', true);
+        
+        try {
+            const result = await callGAS('modificarVenta', {
+                id: venta.id,
+                cantidad: nuevaCantidad,
+                cliente: nuevoCliente,
+                fecha: nuevaFecha
+            });
+            
+            if (loadingNotif) loadingNotif.remove();
+            
+            if (result.success) {
+                mostrarNotificacion('Venta modificada exitosamente', 'success');
+                cerrarModal();
+                await cargarProductos(true);
+                await cargarSelectProductos();
+                await cargarVentas(true);
+                await actualizarFinanzas();
+            } else {
+                mostrarNotificacion(`Error: ${result.error || 'No se pudo modificar'}`, 'error');
+            }
+        } catch (error) {
+            if (loadingNotif) loadingNotif.remove();
+            mostrarNotificacion(`Error de conexión: ${error.message}`, 'error');
+        }
+    };
+}
+
+async function eliminarVenta(id) {
+    const idStr = String(id);
+    const venta = ventasCache.find(v => String(v.id) === idStr);
+    
+    if (!venta) {
+        mostrarNotificacion('Venta no encontrada en caché', 'error');
+        return;
+    }
+    
+    if (!confirm(`⚠️ ¿Eliminar la venta de ${venta.productoNombre} (${venta.cantidad} unidades) permanentemente?\nEsta acción restaurará el stock y ajustará las finanzas.`)) return;
+
+    const loadingNotif = mostrarNotificacion('Eliminando venta...', 'info', true);
+
+    try {
+        const result = await callGAS('eliminarVenta', { id: venta.id });
+
+        if (loadingNotif) loadingNotif.remove();
+
+        if (result.success) {
+            mostrarNotificacion('Venta eliminada exitosamente', 'success');
+            await cargarProductos(true);
+            await cargarSelectProductos();
+            await cargarVentas(true);
+            await actualizarFinanzas();
+        } else {
+            mostrarNotificacion(`Error: ${result.error || 'No se pudo eliminar'}`, 'error');
+        }
+    } catch (error) {
+        if (loadingNotif) loadingNotif.remove();
+        mostrarNotificacion(`Error de conexión: ${error.message}`, 'error');
+    }
 }
 
 async function cargarSelectProductos() {
@@ -428,24 +603,6 @@ function renderizarMovimientos(movimientos) {
     `).join('');
 }
 
-function renderizarGraficoBalance(movimientos) {
-    const container = document.getElementById('balanceBars');
-    if (!container) return;
-    
-    // Tomar últimos 10 movimientos
-    const ultimos = movimientos.slice(-10);
-    const maxBalance = Math.max(...ultimos.map(m => m.balance || 0), 100);
-    
-    container.innerHTML = ultimos.map(m => {
-        const height = ((m.balance || 0) / maxBalance) * 180;
-        const fecha = new Date(m.fecha).toLocaleDateString();
-        return `
-            <div class="bar" style="height: ${height}px;">
-                <div class="bar-label">${fecha}</div>
-            </div>
-        `;
-    }).join('');
-}
 
 // =====================================================
 // NAVEGACIÓN Y RENDERIZADO DE PÁGINAS
@@ -461,8 +618,7 @@ async function loadPage(pageName) {
         dashboard: 'dashboard_content.html',
         productos: 'productos.html',
         ventas: 'ventas.html',
-        finanzas: 'finanzas.html',
-        estadisticas: 'estadisticas.html'
+        finanzas: 'finanzas.html'
     };
 
     const fileName = pages[pageName];
@@ -491,8 +647,7 @@ async function loadPage(pageName) {
                 dashboard: 'Dashboard',
                 productos: 'Productos',
                 ventas: 'Ventas',
-                finanzas: 'Finanzas',
-                estadisticas: 'Estadísticas'
+                finanzas: 'Finanzas'
             }[pageName];
         }
 
@@ -504,8 +659,6 @@ async function loadPage(pageName) {
             initFinanzasPage();
         } else if (pageName === 'dashboard') {
             await initDashboardPage();
-        } else if (pageName === 'estadisticas') {
-            await initEstadisticasPage();
         }
     } catch (error) {
         console.error('loadPage:', error);
@@ -563,48 +716,6 @@ async function initDashboardPage() {
     await cargarProductos();
     await cargarVentas();
     await actualizarFinanzas();
-}
-
-async function initEstadisticasPage() {
-    const container = document.getElementById('statsMensualGrid');
-    const barsContainer = document.getElementById('balanceBars');
-    if (container) container.innerHTML = '<p class="text-muted">Cargando estadísticas...</p>';
-    
-    try {
-        const result = await callGAS('obtenerFinanzasPorMes', {});
-        if (result.success && result.data) {
-            renderizarEstadisticasMensuales(result.data, container);
-            renderizarGraficoBalanceMensual(result.data, barsContainer);
-        } else {
-            if (container) container.innerHTML = '<p class="text-muted">No hay datos suficientes para mostrar estadísticas.</p>';
-        }
-    } catch (error) {
-        console.error("Error cargando estadísticas mensuales:", error);
-        if (container) container.innerHTML = '<p class="text-muted">Error al cargar las estadísticas.</p>';
-    }
-}
-
-function renderizarEstadisticasMensuales(datosMensuales, container) {
-    if (!container) return;
-    if (!datosMensuales || datosMensuales.length === 0) {
-        container.innerHTML = '<p class="text-muted">No hay datos mensuales para mostrar.</p>';
-        return;
-    }
-    let html = '<div class="stats-grid">';
-    datosMensuales.forEach(mes => {
-        html += `
-            <div class="stat-card">
-                <div class="stat-icon">📅</div>
-                <div class="stat-info">
-                    <span class="stat-label">${mes.mes}</span>
-                    <span class="stat-value">$${mes.balance.toFixed(2)}</span>
-                    <small>Ing: $${mes.ingresos.toFixed(2)} / Egr: $${mes.egresos.toFixed(2)}</small>
-                </div>
-            </div>
-        `;
-    });
-    html += '</div>';
-    container.innerHTML = html;
 }
 
 function renderizarGraficoBalanceMensual(datosMensuales, container) {

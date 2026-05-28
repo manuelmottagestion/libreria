@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Librería Gestión - Iniciar Sesión</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="login-page">
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-icon">📚</div>
+            <h1>Librería Gestión</h1>
+            
+            <div class="login-divider"></div>
+            
+            <div id="login-status" class="login-status"></div>
+            <!-- <div id="login-debug" class="login-debug"></div> -->
+            
+            <form id="loginForm" class="login-form">
+                <div class="form-group">
+                    <label>✉️ Tu correo electrónico</label>
+                    <input type="email" id="loginEmail" placeholder="tucorreo@gmail.com" required autofocus>
+                </div>
+                <button type="submit" class="btn-primary btn-large" style="width: 100%;">Ingresar</button>
+            </form>
+            
+            <p class="login-note">Solo usuarios autorizados pueden acceder. Contactá al administrador si no tenés acceso.</p>
+        </div>
+    </div>
+    
+    <script src="config.js"></script>
+    <script src="script.js"></script>
+    <script>
+        const form = document.getElementById('loginForm');
+        const statusDiv = document.getElementById('login-status');
+        //const debugDiv = document.getElementById('login-debug');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const email = document.getElementById('loginEmail').value.trim().toLowerCase();
+
+            if (!email) {
+                statusDiv.innerHTML = '<div class="error">❌ Ingresá un email válido</div>';
+                return;
+            }
+
+            if (window.location.protocol === 'file:') {
+                statusDiv.innerHTML = '<div class="error">❌ Estás abriendo la app desde file://. Iniciá la app con un servidor local (por ejemplo: http://localhost:5500) o súbela a GitHub Pages.</div>';
+                return;
+            }
+
+            statusDiv.innerHTML = '<div>⏳ Verificando acceso...</div>';
+            //if (debugDiv) debugDiv.innerText = `Backend: ${CONFIG.GAS_URL}`;
+
+            try {
+                const resultado = await callGAS('login', { email: email });
+
+                if (resultado.success && resultado.data?.token) {
+                    const emailGuardado = (resultado.data.usuario?.email || email).toLowerCase().trim();
+                    localStorage.setItem('libToken', resultado.data.token);
+                    localStorage.setItem('libUser', emailGuardado);
+                    window.location.href = 'dashboard.html';
+                } else {
+                    statusDiv.innerHTML = `<div class="error">❌ Acceso denegado. ${resultado.error || 'Email no autorizado'}</div>`;
+                }
+            } catch (error) {
+                console.error('Login falló:', error);
+                statusDiv.innerHTML = `<div class="error">❌ ${error.message}</div>`;
+                /*if (debugDiv) {
+                    debugDiv.innerText += `\nERROR: ${error.message}`;
+                }*/
+            }
+        });
+    </script>
+    <style>
+        .login-form {
+            margin: 1rem 0;
+        }
+        .login-form .form-group {
+            margin-bottom: 1rem;
+            text-align: left;
+        }
+        .login-form input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+        .error {
+            color: #ef4444;
+            background: #fee2e2;
+            padding: 0.75rem;
+            border-radius: 8px;
+        }
+    </style>
+</body>
+</html>

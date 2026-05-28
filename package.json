@@ -1,0 +1,28 @@
+{
+  "name": "libreria-testing",
+  "version": "1.0.0",
+  "description": "Full stack testing suite for Librería system",
+  "scripts": {
+    "test": "jest --verbose",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:all": "npm run test && npm run test:e2e",
+    "test:gas": "node tests/gas-validation.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "@babel/preset-env": "^7.23.0"
+  },
+  "keywords": [
+    "testing",
+    "jest",
+    "playwright",
+    "e2e"
+  ],
+  "author": "Librería Project",
+  "license": "MIT"
+}

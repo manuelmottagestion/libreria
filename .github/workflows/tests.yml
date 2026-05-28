@@ -1,0 +1,65 @@
+name: Full Stack Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Usar Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+
+    - name: Instalar dependencias
+      run: npm install
+
+    - name: Ejecutar Unit Tests (Frontend)
+      run: npm run test -- --coverage --testPathPattern="unit"
+      
+    - name: Ejecutar Validación GAS
+      run: npm run test:gas
+
+    - name: Ejecutar E2E Tests (Playwright)
+      run: npm run test:e2e
+      continue-on-error: true
+
+    - name: Subir Coverage Reports
+      uses: codecov/codecov-action@v3
+      if: always()
+      with:
+        files: ./coverage/coverage-final.json
+        flags: unittests
+        name: codecov-umbrella
+
+    - name: Generar reporte HTML de E2E
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: playwright-report
+        path: playwright-report/
+        retention-days: 30
+
+    - name: Comentar en PR con resultados
+      if: github.event_name == 'pull_request' && always()
+      uses: actions/github-script@v6
+      with:
+        script: |
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: '✅ Tests completados. Revisa los reportes en los artifacts.'
+          })

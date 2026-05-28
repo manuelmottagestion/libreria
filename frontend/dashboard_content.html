@@ -1,9 +1,9 @@
-<div class="page-finanzas">
+<div class="page-dashboard">
     <div class="page-header">
-        <h2>💵 Control Financiero</h2>
+        <h2>📊 Resumen general</h2>
+        <p class="page-subtitle">Vista rápida de finanzas, productos y ventas</p>
     </div>
-    
-    <!-- Tarjetas de resumen -->
+
     <div class="stats-grid">
         <div class="stat-card income">
             <div class="stat-icon">💰</div>
@@ -35,9 +35,53 @@
         </div>
     </div>
 
-    <!-- Tabla de movimientos -->
+    <div class="dashboard-grid">
+        <div class="table-container">
+            <h3>📦 Productos (últimos registrados)</h3>
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Nombre</th>
+                            <th>Costo</th>
+                            <th>Precio</th>
+                            <th>Stock</th>
+                            <th>Margen</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="productosLista">
+                        <tr><td colspan="7">Cargando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <h3>💰 Ventas recientes</h3>
+            <div class="table-responsive">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Producto</th>
+                            <th>Cant.</th>
+                            <th>Total</th>
+                            <th>Ganancia</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ventasLista">
+                        <tr><td colspan="6">Cargando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <div class="table-container">
-        <h3>Historial de Movimientos</h3>
+        <h3>Historial de movimientos</h3>
         <div class="table-responsive">
             <table class="data-table">
                 <thead>
